@@ -19,6 +19,15 @@ from gi.repository import Adw, Gdk, Gio, GLib, GObject, Gtk, Pango
 
 from . import storage
 from .data import DAILY_RHYTHM, FORCE_MULTIPLIERS, PRIORITY_ORDER, THEMES, TEMPLATES
+from .phelps_data import (
+    DAILY_MINIMUM,
+    MENTALITY_SHIFTS,
+    METRICS,
+    MONTHLY_CHECKS,
+    QUARTERLY_MILESTONES,
+    TIMELINE,
+    WEEKLY_SCHEDULE,
+)
 
 
 def _esc(s: str) -> str:
@@ -68,6 +77,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.toolbar.set_margin_bottom(6)
         self.tab_buttons: dict[str, Gtk.ToggleButton] = {}
         tabs = [
+            ("phelps", "🔥 Phelps"),
             ("journal", "📖 Dnevnik"),
             ("themes", "🎯 Teme"),
             ("exercises", "💪 Vežbe"),
@@ -92,6 +102,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.stack.set_vexpand(True)
 
         self.views = {
+            "phelps": PhelpsView(),
             "journal": JournalView(),
             "themes": ThemesView(),
             "exercises": ExercisesView(),
@@ -108,7 +119,7 @@ class MainWindow(Adw.ApplicationWindow):
         self.set_content(main_box)
 
         # aktiviraj prvi tab
-        self.tab_buttons["journal"].set_active(True)
+        self.tab_buttons["phelps"].set_active(True)
 
     def _on_tab_toggled(self, btn, tab_id: str):
         if btn.get_active():
@@ -148,6 +159,251 @@ def section_header(text: str) -> Gtk.Label:
     lbl.set_margin_bottom(8)
     lbl.add_css_class("title-4")
     return lbl
+
+
+# ════════════════════════════════════════════════════════════════════
+# VIEW 0: PHELPS — elite training sistem (GLAVNI EKRAN)
+# ════════════════════════════════════════════════════════════════════
+class PhelpsView(Gtk.Box):
+    """Phelps elite training: streak, dnevni minimum, raspored, metrike."""
+
+    def __init__(self):
+        super().__init__(orientation=Gtk.Orientation.VERTICAL, spacing=0)
+        self.refresh()
+
+    def refresh(self):
+        # očisti
+        while True:
+            child = self.get_first_child()
+            if child is None:
+                break
+            self.remove(child)
+
+        # === HEADER ===
+        title = Gtk.Label(label="🔥 Phelps Training Sistem")
+        title.add_css_class("title-1")
+        title.set_xalign(0.0)
+        title.set_margin_start(16)
+        title.set_margin_top(16)
+        title.set_margin_bottom(4)
+        self.append(title)
+
+        sub = Gtk.Label(label="365 dana. Bez off-season. Top 0.1% je cena koja se plaća konzistencijom.")
+        sub.set_xalign(0.0)
+        sub.set_margin_start(16)
+        sub.set_margin_bottom(12)
+        sub.add_css_class("dim-label")
+        self.append(sub)
+
+        # === STREAK BANNER ===
+        info = storage.get_streak_info()
+        streak_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
+        streak_box.set_margin_start(16)
+        streak_box.set_margin_end(16)
+        streak_box.set_margin_bottom(8)
+        streak_box.set_halign(Gtk.Align.CENTER)
+
+        for value, label in [
+            (f"{info['current_streak']}", "🔥 Trenutni\nstreak"),
+            (f"{info['longest_streak']}", "🏆 Najduži\nstreak"),
+            (f"{info['total_days']}", "📅 Ukupno\ndana"),
+            (f"{info['today_count']}/3", "✅ Danas\nzavršeno"),
+        ]:
+            stat = self._make_stat(value, label)
+            streak_box.append(stat)
+        self.append(streak_box)
+
+        # === HEATMAP ===
+        self.append(self._make_heatmap(info["heatmap"]))
+
+        # === DNEVNI MINIMUM ===
+        self.append(section_header("✅ Današnji minimum (45 min)"))
+        for item in DAILY_MINIMUM:
+            self.append(self._make_check_row(item))
+
+        # === NEDELJNI RASPORED ===
+        self.append(section_header("📅 Nedeljni raspored (~12h)"))
+        for block in WEEKLY_SCHEDULE:
+            self.append(self._make_schedule_card(block))
+
+        # === 4 METRIKE ===
+        self.append(section_header("📊 Šta meriti"))
+        for m in METRICS:
+            self.append(self._make_metric_row(m))
+
+        # === MESEČNE KONTROLE ===
+        self.append(section_header("🗓️ Mesečne kontrole"))
+        for cid, label, desc in MONTHLY_CHECKS:
+            row = Adw.ActionRow()
+            row.set_title(label)
+            row.set_subtitle(desc)
+            row.add_css_class("property")
+            row.set_margin_start(16)
+            row.set_margin_end(16)
+            self.append(row)
+
+        # === KVARTALNI MILESTONES ===
+        self.append(section_header("🎯 Kvartalni milestones"))
+        for cid, label, desc in QUARTERLY_MILESTONES:
+            row = Adw.ActionRow()
+            row.set_title(label)
+            row.set_subtitle(desc)
+            row.add_css_class("property")
+            row.set_margin_start(16)
+            row.set_margin_end(16)
+            self.append(row)
+
+        # === TIMELINE ===
+        self.append(section_header("🗺️ Realan vremenski okvir"))
+        for period, level, desc in TIMELINE:
+            row = Adw.ActionRow()
+            row.set_title(f"{period} → {level}")
+            row.set_subtitle(desc)
+            row.set_margin_start(16)
+            row.set_margin_end(16)
+            self.append(row)
+
+        # === MENTALITET ===
+        self.append(section_header("🧠 Mentalitet: top 5% vs top 0.1%"))
+        for bad, good in MENTALITY_SHIFTS:
+            row = Adw.ActionRow()
+            row.set_title(f"❌ {_esc(bad)}")
+            row.set_subtitle(f"✅ {_esc(good)}")
+            row.set_margin_start(16)
+            row.set_margin_end(16)
+            self.append(row)
+
+        # bottom padding
+        spacer = Gtk.Box()
+        spacer.set_margin_bottom(20)
+        self.append(spacer)
+
+    def _make_stat(self, value: str, label: str) -> Gtk.Box:
+        """Kreira statistički blok (broj + label)."""
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        box.set_halign(Gtk.Align.CENTER)
+        v = Gtk.Label(label=value)
+        v.add_css_class("title-1")
+        box.append(v)
+        l = Gtk.Label(label=label)
+        l.add_css_class("caption")
+        l.add_css_class("dim-label")
+        l.set_justify(Gtk.Justification.CENTER)
+        box.append(l)
+        return box
+
+    def _make_heatmap(self, heatmap: list[dict]) -> Gtk.Widget:
+        """GitHub-style heatmap zadnjih 90 dana."""
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        outer.set_margin_start(16)
+        outer.set_margin_end(16)
+        outer.set_margin_top(8)
+        outer.set_margin_bottom(8)
+
+        lbl = Gtk.Label(label="Zadnjih 90 dana aktivnosti")
+        lbl.set_xalign(0.0)
+        lbl.add_css_class("caption")
+        lbl.add_css_class("dim-label")
+        outer.append(lbl)
+
+        # grid: 90 dana, 13 nedelja x 7 dana = 91 ćelija
+        grid = Gtk.Grid()
+        grid.set_column_spacing(3)
+        grid.set_row_spacing(3)
+        grid.set_halign(Gtk.Align.START)
+
+        # raspodeli po nedeljama (kolone)
+        for i, entry in enumerate(heatmap):
+            week = i // 7
+            day = i % 7
+            cell = Gtk.Box()
+            cell.set_size_request(12, 12)
+            cell.add_css_class("heatmap-cell")
+            count = entry["count"]
+            if count == 0:
+                cell.add_css_class("heatmap-empty")
+            elif count == 1:
+                cell.add_css_class("heatmap-low")
+            elif count == 2:
+                cell.add_css_class("heatmap-mid")
+            else:
+                cell.add_css_class("heatmap-high")
+            cell.set_tooltip_text(f"{entry['date']}: {count}/3 završeno")
+            grid.attach(cell, week, day, 1, 1)
+
+        outer.append(grid)
+        return outer
+
+    def _make_check_row(self, item: dict) -> Adw.ActionRow:
+        """Stvara red sa checkbox-om za dnevni minimum."""
+        row = Adw.ActionRow()
+        row.set_title(f"{item['icon']} {item['label']}")
+        row.set_subtitle(f"{item['duration']} — {item['desc']}")
+
+        check = Gtk.CheckButton()
+        check.set_valign(Gtk.Align.CENTER)
+        checked = storage.is_checked(item["id"])
+        check.set_active(checked)
+        check.connect("toggled", self._on_check_toggled, item["id"], row)
+        row.add_suffix(check)
+
+        row.set_margin_start(16)
+        row.set_margin_end(16)
+        row.set_activatable(True)
+        row.connect("activated", lambda *_: check.set_active(not check.get_active()))
+        return row
+
+    def _on_check_toggled(self, check: Gtk.CheckButton, item_id: str, row: Adw.ActionRow):
+        storage.toggle_check(item_id)
+        if check.get_active():
+            row.add_css_class("success")
+        else:
+            row.remove_css_class("success")
+        # osveži streak banner
+        self.refresh()
+
+    def _make_schedule_card(self, block: dict) -> Gtk.Box:
+        """Kreira karticu za blok nedeljnog rasporeda."""
+        header_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+        days = Gtk.Label(label=block["days"])
+        days.add_css_class("title-4")
+        days.set_xalign(0.0)
+        header_box.append(days)
+        total = Gtk.Label(label=f"({block['total']})")
+        total.add_css_class("dim-label")
+        total.add_css_class("caption")
+        total.set_margin_start(8)
+        header_box.append(total)
+
+        widgets = [header_box]
+        for name, time, desc in block["blocks"]:
+            item_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+            item_header = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
+            nm = Gtk.Label(label=f"  {name}")
+            nm.set_xalign(0.0)
+            nm.add_css_class("subtitle")
+            item_header.append(nm)
+            tm = Gtk.Label(label=f"[{time}]")
+            tm.add_css_class("dim-label")
+            tm.add_css_class("caption")
+            item_header.append(tm)
+            item_box.append(item_header)
+            d = make_label(desc)
+            d.set_margin_start(16)
+            item_box.append(d)
+            item_box.set_margin_bottom(4)
+            widgets.append(item_box)
+
+        return make_card(*widgets)
+
+    def _make_metric_row(self, m: dict) -> Adw.ActionRow:
+        row = Adw.ActionRow()
+        row.set_title(f"{m['icon']} {m['label']} — {m['target']}")
+        row.set_subtitle(f"[{m['unit']}] {m['desc']}")
+        row.add_css_class("property")
+        row.set_margin_start(16)
+        row.set_margin_end(16)
+        return row
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -754,5 +1010,46 @@ class TemplatesView(Gtk.Box):
 
 def run():
     """Entry point za pokretanje aplikacije."""
+    _load_css()
     app = ProblemForgeApp()
     return app.run()
+
+
+def _load_css():
+    """Učitaj CSS stilove za heatmap i custom elemente."""
+    css = """
+    .heatmap-cell {
+        border-radius: 3px;
+    }
+    .heatmap-empty {
+        background-color: alpha(@theme_fg_color, 0.08);
+    }
+    .heatmap-low {
+        background-color: #0e4429;
+    }
+    .heatmap-mid {
+        background-color: #00a636;
+    }
+    .heatmap-high {
+        background-color: #39d353;
+    }
+    .card {
+        background-color: @theme_bg_color;
+        border-radius: 12px;
+        box-shadow: 0 1px 3px alpha(black, 0.08);
+    }
+    row.success {
+        background-color: alpha(@success_color, 0.1);
+    }
+    .monospace {
+        font-family: monospace;
+        font-size: 0.85em;
+    }
+    """
+    provider = Gtk.CssProvider()
+    provider.load_from_data(css.encode("utf-8"))
+    Gtk.StyleContext.add_provider_for_display(
+        Gdk.Display.get_default(),
+        provider,
+        Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION,
+    )
