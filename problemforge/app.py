@@ -60,45 +60,18 @@ class MainWindow(Adw.ApplicationWindow):
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
         self.set_title(APP_NAME)
-        self.set_default_size(980, 700)
+        self.set_default_size(960, 720)
 
-        # glavni layout
-        main_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        # --- ToolbarView: header na vrhu, switcher bar ispod, sadržaj u sredini ---
+        toolbar_view = Adw.ToolbarView()
 
-        # --- header bar ---
+        # --- Header bar ---
         header = Adw.HeaderBar()
-        header.add_css_class("flat")
-        main_box.append(header)
+        header.set_title_widget(Adw.WindowTitle.new(APP_NAME, "Trening sistem za inženjere"))
+        toolbar_view.add_top_bar(header)
 
-        # --- toolbar sa dugmićima za tabove ---
-        self.toolbar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
-        self.toolbar.set_margin_start(12)
-        self.toolbar.set_margin_end(12)
-        self.toolbar.set_margin_bottom(6)
-        self.tab_buttons: dict[str, Gtk.ToggleButton] = {}
-        tabs = [
-            ("phelps", "🔥 Phelps"),
-            ("journal", "📖 Dnevnik"),
-            ("themes", "🎯 Teme"),
-            ("exercises", "💪 Vežbe"),
-            ("resources", "📚 Resursi"),
-            ("templates", "📋 Šabloni"),
-        ]
-        for i, (tid, label) in enumerate(tabs):
-            btn = Gtk.ToggleButton(label=label)
-            btn.connect("toggled", self._on_tab_toggled, tid)
-            if i > 0:
-                btn.set_group(self.tab_buttons[tabs[0][0]])
-            self.toolbar.append(btn)
-            self.tab_buttons[tid] = btn
-        main_box.append(self.toolbar)
-
-        # separator
-        main_box.append(Gtk.Separator())
-
-        # --- sadržaj (stack) ---
-        self.stack = Gtk.Stack()
-        self.stack.set_transition_type(Gtk.StackTransitionType.CROSSFADE)
+        # --- ViewSwitcher u header-u (nativni GNOME tab pattern) ---
+        self.stack = Adw.ViewStack()
         self.stack.set_vexpand(True)
 
         self.views = {
@@ -109,22 +82,37 @@ class MainWindow(Adw.ApplicationWindow):
             "resources": ResourcesView(),
             "templates": TemplatesView(),
         }
+        tab_meta = {
+            "phelps": ("Phelps", "preferences-system-time-symbolic"),
+            "journal": ("Dnevnik", "document-edit-symbolic"),
+            "themes": ("Teme", "applications-science-symbolic"),
+            "exercises": ("Vežbe", "go-up-symbolic"),
+            "resources": ("Resursi", "accessories-dictionary-symbolic"),
+            "templates": ("Šabloni", "edit-copy-symbolic"),
+        }
         for tid, view in self.views.items():
-            scroll = Gtk.ScrolledWindow()
-            scroll.set_child(view)
-            scroll.set_vexpand(True)
-            self.stack.add_named(scroll, tid)
+            title, icon = tab_meta[tid]
+            page = self.stack.add_titled(view, tid, title)
+            page.set_icon_name(icon)
 
-        main_box.append(self.stack)
-        self.set_content(main_box)
+        # ViewSwitcherBar ispod header-a
+        switcher = Adw.ViewSwitcherBar()
+        switcher.set_stack(self.stack)
+        switcher.set_reveal(True)
+        toolbar_view.add_top_bar(switcher)
 
-        # aktiviraj prvi tab
-        self.tab_buttons["phelps"].set_active(True)
+        # --- Sadržaj ---
+        toolbar_view.set_content(self.stack)
+        self.set_content(toolbar_view)
 
-    def _on_tab_toggled(self, btn, tab_id: str):
-        if btn.get_active():
-            self.stack.set_visible_child_name(tab_id)
-            self.views[tab_id].refresh()
+        # Aktiviraj prvi tab
+        self.stack.set_visible_child_name("phelps")
+        self.stack.connect("notify::visible-child-name", self._on_tab_changed)
+
+    def _on_tab_changed(self, stack, _param):
+        name = stack.get_visible_child_name()
+        if name in self.views:
+            self.views[name].refresh()
 
 
 # ════════════════════════════════════════════════════════════════════
@@ -179,29 +167,32 @@ class PhelpsView(Gtk.Box):
                 break
             self.remove(child)
 
-        # === HEADER ===
-        title = Gtk.Label(label="🔥 Phelps Training Sistem")
-        title.add_css_class("title-1")
+        # === HERO HEADER ===
+        hero_box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
+        hero_box.set_margin_start(20)
+        hero_box.set_margin_end(20)
+        hero_box.set_margin_top(20)
+        hero_box.set_margin_bottom(4)
+        title = Gtk.Label(label="🔥 Phelps Training")
+        title.add_css_class("hero-title")
         title.set_xalign(0.0)
-        title.set_margin_start(16)
-        title.set_margin_top(16)
-        title.set_margin_bottom(4)
-        self.append(title)
-
-        sub = Gtk.Label(label="365 dana. Bez off-season. Top 0.1% je cena koja se plaća konzistencijom.")
-        sub.set_xalign(0.0)
-        sub.set_margin_start(16)
-        sub.set_margin_bottom(12)
+        hero_box.append(title)
+        sub = Gtk.Label(label="365 dana. Bez off-season. Top 0.1% se plaća konzistencijom.")
+        sub.add_css_class("hero-subtitle")
         sub.add_css_class("dim-label")
-        self.append(sub)
+        sub.set_xalign(0.0)
+        hero_box.append(sub)
+        self.append(hero_box)
 
         # === STREAK BANNER ===
         info = storage.get_streak_info()
-        streak_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=24)
-        streak_box.set_margin_start(16)
-        streak_box.set_margin_end(16)
-        streak_box.set_margin_bottom(8)
-        streak_box.set_halign(Gtk.Align.CENTER)
+        streak_banner = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=32)
+        streak_banner.add_css_class("streak-banner")
+        streak_banner.set_margin_start(20)
+        streak_banner.set_margin_end(20)
+        streak_banner.set_margin_top(12)
+        streak_banner.set_margin_bottom(16)
+        streak_banner.set_halign(Gtk.Align.CENTER)
 
         for value, label in [
             (f"{info['current_streak']}", "🔥 Trenutni\nstreak"),
@@ -210,8 +201,8 @@ class PhelpsView(Gtk.Box):
             (f"{info['today_count']}/3", "✅ Danas\nzavršeno"),
         ]:
             stat = self._make_stat(value, label)
-            streak_box.append(stat)
-        self.append(streak_box)
+            streak_banner.append(stat)
+        self.append(streak_banner)
 
         # === HEATMAP ===
         self.append(self._make_heatmap(info["heatmap"]))
@@ -280,10 +271,10 @@ class PhelpsView(Gtk.Box):
 
     def _make_stat(self, value: str, label: str) -> Gtk.Box:
         """Kreira statistički blok (broj + label)."""
-        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
         box.set_halign(Gtk.Align.CENTER)
         v = Gtk.Label(label=value)
-        v.add_css_class("title-1")
+        v.add_css_class("streak-number")
         box.append(v)
         l = Gtk.Label(label=label)
         l.add_css_class("caption")
@@ -293,31 +284,30 @@ class PhelpsView(Gtk.Box):
         return box
 
     def _make_heatmap(self, heatmap: list[dict]) -> Gtk.Widget:
-        """GitHub-style heatmap zadnjih 90 dana."""
-        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=4)
-        outer.set_margin_start(16)
-        outer.set_margin_end(16)
-        outer.set_margin_top(8)
-        outer.set_margin_bottom(8)
+        """GitHub-style heatmap zadnjih 90 dana sa legendom."""
+        outer = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=6)
+        outer.set_margin_start(20)
+        outer.set_margin_end(20)
+        outer.set_margin_top(4)
+        outer.set_margin_bottom(16)
 
-        lbl = Gtk.Label(label="Zadnjih 90 dana aktivnosti")
+        lbl = Gtk.Label(label="Poslednjih 90 dana aktivnosti")
         lbl.set_xalign(0.0)
         lbl.add_css_class("caption")
         lbl.add_css_class("dim-label")
         outer.append(lbl)
 
-        # grid: 90 dana, 13 nedelja x 7 dana = 91 ćelija
+        # grid: 90 dana, 13 nedelja x 7 dana
         grid = Gtk.Grid()
         grid.set_column_spacing(3)
         grid.set_row_spacing(3)
-        grid.set_halign(Gtk.Align.START)
+        grid.set_halign(Gtk.Align.CENTER)
 
-        # raspodeli po nedeljama (kolone)
         for i, entry in enumerate(heatmap):
             week = i // 7
             day = i % 7
             cell = Gtk.Box()
-            cell.set_size_request(12, 12)
+            cell.set_size_request(14, 14)
             cell.add_css_class("heatmap-cell")
             count = entry["count"]
             if count == 0:
@@ -332,6 +322,22 @@ class PhelpsView(Gtk.Box):
             grid.attach(cell, week, day, 1, 1)
 
         outer.append(grid)
+
+        # legenda
+        legend = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        legend.set_halign(Gtk.Align.END)
+        legend.add_css_class("heatmap-legend")
+        legend.add_css_class("dim-label")
+        legend.append(Gtk.Label(label="Manje"))
+        for cls in ["heatmap-empty", "heatmap-low", "heatmap-mid", "heatmap-high"]:
+            lc = Gtk.Box()
+            lc.set_size_request(12, 12)
+            lc.add_css_class("heatmap-cell")
+            lc.add_css_class(cls)
+            legend.append(lc)
+        legend.append(Gtk.Label(label="Više"))
+        outer.append(legend)
+
         return outer
 
     def _make_check_row(self, item: dict) -> Adw.ActionRow:
@@ -1016,13 +1022,15 @@ def run():
 
 
 def _load_css():
-    """Učitaj CSS stilove za heatmap i custom elemente."""
+    """Učitaj CSS stilove za heatmap, kartice i custom elemente."""
     css = """
+    /* ── Heatmap ćelije ── GitHub stil sa zaobljenim ivicama */
     .heatmap-cell {
         border-radius: 3px;
+        border: 1px solid alpha(black, 0.05);
     }
     .heatmap-empty {
-        background-color: alpha(@theme_fg_color, 0.08);
+        background-color: alpha(@theme_fg_color, 0.06);
     }
     .heatmap-low {
         background-color: #0e4429;
@@ -1033,17 +1041,54 @@ def _load_css():
     .heatmap-high {
         background-color: #39d353;
     }
+
+    /* ── Kartice ── nativni libadwaita card-box stil */
     .card {
-        background-color: @theme_bg_color;
+        background-color: @card_bg_color;
         border-radius: 12px;
-        box-shadow: 0 1px 3px alpha(black, 0.08);
+        border: 1px solid alpha(@theme_fg_color, 0.08);
     }
+
+    /* ── Streak banner ── istaknut okvir */
+    .streak-banner {
+        background-color: @card_bg_color;
+        border-radius: 16px;
+        border: 1px solid alpha(@theme_fg_color, 0.08);
+        padding: 20px 32px;
+    }
+    .streak-number {
+        font-size: 2.2em;
+        font-weight: 800;
+    }
+
+    /* ── Checkbox success ── */
     row.success {
-        background-color: alpha(@success_color, 0.1);
+        background-color: alpha(@success_color, 0.12);
     }
+
+    /* ── Monospace ── */
     .monospace {
         font-family: monospace;
         font-size: 0.85em;
+    }
+
+    /* ── Hero sekcija ── */
+    .hero-title {
+        font-size: 1.8em;
+        font-weight: 700;
+    }
+    .hero-subtitle {
+        font-size: 1.05em;
+    }
+
+    /* ── Tab content padding ── */
+    .tab-content {
+        padding-bottom: 24px;
+    }
+
+    /* ── Heatmap label ── */
+    .heatmap-legend {
+        font-size: 0.8em;
     }
     """
     provider = Gtk.CssProvider()
