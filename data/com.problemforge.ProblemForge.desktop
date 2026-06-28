@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=ProblemForge
+Comment=Dnevnik loše rešenih problema + karijerni razvojni sistem
+Comment[en]=Problem journal + career development system for engineers
+Exec=problemforge
+Icon=problemforge
+Terminal=false
+Categories=Office;Utility;Development;
+Keywords=journal;problems;career;engineering;
+StartupNotify=true
